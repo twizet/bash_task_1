@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Файл з даними
+input_file="input.txt"
+output_file="output.txt"
+
+# Домашній домен для пошти
+domain="example.com"
+
+# Функція для виправлення імен
+fix_name() {
+  echo "$1" | sed 's/\b\(.\)/\u\1/g'
+}
+
+# Очищуємо вихідний файл
+> "$output_file"
+
+# Масив для збереження оброблених імен
+declare -A email_map
+
+# Обробка кожного рядка у файлі
+while IFS=" " read -r name surname; do
+  # Виправлення імені та прізвища
+  fixed_name=$(fix_name "$name")
+  fixed_surname=$(fix_name "$surname")
+
+  # Формування пошти
+  email="${fixed_name,,}.${fixed_surname,,}@$domain"
+  
+  # Перевірка на повторення та додавання унікального ідентифікатора
+  if [[ ${email_map["$email"]+_} ]]; then
+    email_count=${email_map["$email"]}
+    ((email_count++))
+    email="${fixed_name,,}.${fixed_surname,,}${email_count}@$domain"
+    email_map["$email"]=$email_count
+  else
+    email_map["$email"]=1
+  fi
+
+  # Запис у вихідний файл
+  echo "$fixed_name $fixed_surname $email" >> "$output_file"
+done < "$input_file"
+
+echo "Обробка завершена. Результат у файлі $output_file."
