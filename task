@@ -1,44 +1,104 @@
+## Finished:83.33/100
+
+# Current state: 
+# 3,2,Brenda Brown,"Director,bbrown@abc.com,
+# 4,3,Howard Lader,"Manager,hlader@abc.com,
+# 11,8,Marilyn Baker-venturini,Director,mbaker-venturini@abc.com,
+# 22,14,Andres Espinoza,"Manager,aespinoza@abc.com,
+
+# Expected State:
+# 3,2,Brenda Brown,"Director, Second Career Services",bbrown@abc.com,
+# 4,3,Howard Lader,"Manager, Senior Counseling",hlader@abc.com,
+# 11,8,Marilyn Baker-Venturini,Director,mbaker-venturini@abc.com,
+# 22,14,Andres Espinoza,"Manager, Commanding Officer",aespinoza@abc.com,
+
+#  Possible way to solve:
+# Росхуярить башку к чертям собачим ибо я ебу как бащ считывает поля нахуй... завтра разберись - буть сука мужиком
+
+
+
+
 #!/bin/bash
 
-# Файл з даними
-input_file="input.txt"
-output_file="output.txt"
+# Дополнительная защита
+set -e
+# Включение логирования (простое логирование через echo)
+log_file="script.log"
+exec > >(tee -i "$log_file")
+exec 2>&1
 
-# Домашній домен для пошти
-domain="example.com"
+# Проверка наличия аргумента
+if [ -z "$1" ]; then
+  exit 1
+fi
 
-# Функція для виправлення імен
-fix_name() {
-  echo "$1" | sed 's/\b\(.\)/\u\1/g'
-}
+# Определение входного и выходного файлов
+input_file="$1"
+temp_file="accounts_temp.csv"
+output_file="accounts_new.csv"
 
-# Очищуємо вихідний файл
-> "$output_file"
+# Создание временного файла без заголовка
+# Заголовок добавится только в выходной файл
+# Создание временного файла
+: > "$temp_file"
 
-# Масив для збереження оброблених імен
-declare -A email_map
+# Чтение исходного файла и запись форматированных данных во временный файл
+# Чтение исходного файла
+tail -n +2 "$input_file" | while IFS=, read -r id location_id name title email department; do
 
-# Обробка кожного рядка у файлі
-while IFS=" " read -r name surname; do
-  # Виправлення імені та прізвища
-  fixed_name=$(fix_name "$name")
-  fixed_surname=$(fix_name "$surname")
-
-  # Формування пошти
-  email="${fixed_name,,}.${fixed_surname,,}@$domain"
-  
-  # Перевірка на повторення та додавання унікального ідентифікатора
-  if [[ ${email_map["$email"]+_} ]]; then
-    email_count=${email_map["$email"]}
-    ((email_count++))
-    email="${fixed_name,,}.${fixed_surname,,}${email_count}@$domain"
-    email_map["$email"]=$email_count
-  else
-    email_map["$email"]=1
+  # Проверка наличия пустых значений
+  if [ -z "$name" ]; then
+    continue
   fi
 
-  # Запис у вихідний файл
-  echo "$fixed_name $fixed_surname $email" >> "$output_file"
-done < "$input_file"
+  # Разделение имени и фамилии
+  first_name="${name%% *}"                     # Извлекает первое слово из имени
+  last_name="${name#* }"                       # Извлекает все, что идет после первого пробела
 
-echo "Обробка завершена. Результат у файлі $output_file."
+  # Форматирование имени
+  first_name="${first_name,,}"                 # Преобразует все буквы в строчные
+  first_name="${first_name^}"                  # Преобразует первую букву в заглавную
+  last_name="${last_name,,}"                   # Преобразует все буквы в строчные
+  last_name="${last_name^}"                    # Преобразует первую букву в заглавную
+  formatted_name="$first_name $last_name"      # Объединение имени и фамилии
+
+  # Форматирование email
+  email_base="${first_name:0:1}${last_name}"   # Формирует базу email
+  email_base="${email_base,,}"                 # Преобразует базу email в нижний регистр
+  email="${email_base}@abc.com"                # Добавляет домен
+
+  # Запись строки во временный файл
+  echo "$id,$location_id,$formatted_name,$title,$email,$department" >> "$temp_file"
+done
+
+# Создание выходного файла с заголовком
+echo "id,location_id,name,title,email,department" > "$output_file"
+
+# Массив для хранения количества вхождений email_base
+declare -A email_count
+
+# Подсчет количества вхождений каждого базового email
+while IFS=, read -r id location_id name title email department; do
+  email_base="${email%%@abc.com}"
+  email_count["$email_base"]=$((email_count["$email_base"] + 1))
+done < "$temp_file"
+
+# Обновление email и запись в выходной файл
+while IFS=, read -r id location_id name title email department; do
+  email_base="${email%%@abc.com}"
+  
+  # Если базовый email встречается более одного раза, добавляем location_id
+  if [ "${email_count[$email_base]}" -gt 1 ]; then
+    email="${email_base}${location_id}@abc.com"
+  fi
+
+  # Запись строки в выходной файл
+  echo "$id,$location_id,$name,$title,$email,$department" >> "$output_file"
+done < "$temp_file"
+
+# Удаление временного файла
+rm "$temp_file"
+# Логирование завершения работы
+echo "Script execution completed. Output written to $output_file"
+
+rm "$temp_file"
