@@ -98,7 +98,6 @@ done < "$temp_file"
 
 # Удаление временного файла
 rm "$temp_file"
+
 # Логирование завершения работы
 echo "Script execution completed. Output written to $output_file"
-
-rm "$temp_file"
