@@ -15,6 +15,22 @@
 #  Possible way to solve:
 # Росхуярить башку к чертям собачим ибо я ебу как бащ считывает поля нахуй... завтра разберись - буть сука мужиком
 
+# Зацепка: --> выводит такое:
+# tail -n +2 "$input_file" | while IFS=, read -r id location_id name title email department; do 
+#  echo "ID: $id"
+#  echo "Location ID: $location_id"
+#  echo "Name: $name"
+#  echo "Title: $title"
+#  echo "Email: $email"
+#  echo "Department: $department"
+
+# ID: 22
+# Location ID: 14
+# Name: Andres Espinoza
+# Title: "Manager
+# Email:  Commanding Officer"
+# Department:
+
 
 
 
