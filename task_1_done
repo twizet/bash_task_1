@@ -1,0 +1,135 @@
+#!/bin/bash
+
+# Дополнительная защита
+set -e
+
+# Включение логирования (простое логирование через echo)
+log_file="script.log"
+exec > >(tee -i "$log_file")
+exec 2>&1
+
+# Проверка наличия аргумента
+if [ -z "$1" ]; then
+  echo "Usage: $0 input_file"
+  exit 1
+fi
+
+# Определение входного и выходного файлов
+input_file="$1"
+temp_file="accounts_temp.csv"
+output_file="accounts_new.csv"
+email_count_file="email_count_file"
+
+# Создание временного файла без заголовка
+: > "$temp_file"
+
+# Чтение исходного файла и запись форматированных данных во временный файл
+awk -F, '
+BEGIN {
+    FPAT = "([^,]+)|(\"[^\"]*\")"
+}
+NR > 1 { # Пропускаем первую строку (заголовок)
+    id = $1
+    location_id = $2
+    name = $3
+    title = $4
+    email = $5
+    department = $6
+
+    # Проверка наличия пустых значений
+    if (name == "") next
+
+    # Разделение имени и фамилии
+    split(name, names, " ")
+
+    # Проверка, что у нас есть хотя бы два элемента
+    if (length(names) < 2) next
+
+    # Преобразование первой буквы в заглавную и остального в нижний регистр
+    first_name = toupper(substr(names[1], 1, 1)) tolower(substr(names[1], 2))
+
+    # Обработка фамилии
+    last_name = names[2]
+
+    if (index(last_name, "-") > 0) {
+        # Разделение строки по дефису
+        split(last_name, parts, "-")
+        
+        # Преобразование частей: первая буква в заглавную, остальные в строчные
+        part1 = toupper(substr(parts[1], 1, 1)) tolower(substr(parts[1], 2))
+        part2 = toupper(substr(parts[2], 1, 1)) tolower(substr(parts[2], 2))
+        
+        # Объединение частей обратно
+        last_name = part1 "-" part2
+    } else {
+        # Преобразование фамилии
+        last_name = toupper(substr(last_name, 1, 1)) tolower(substr(last_name, 2))
+    }
+
+    formatted_name = first_name " " last_name
+
+    # Формирование базового email (без домена)
+    email_base = tolower(substr(first_name, 1, 1) last_name)
+
+    # Запись строки во временный файл (без домена в email)
+    print id "," location_id "," formatted_name "," title "," email_base "," department >> "'"$temp_file"'"
+}
+' "$input_file"
+
+# Создание выходного файла с заголовком
+echo "id,location_id,name,title,email,department" > "$output_file"
+
+# Второй проход: Подсчет количества вхождений email и запись в файл для посчета 
+# Шаг 1: Подсчет уникальных email и запись в промежуточный файл
+awk '
+BEGIN {
+    FPAT = "([^,]+)|(\"[^\"]*\")"
+}
+{
+    email_base = $5
+    email_count[email_base]++
+}
+END {
+    for (email in email_count) {
+        print email, email_count[email]
+    }
+}' "$temp_file" > "$email_count_file"
+
+echo "Содержимое файла $email_count_file:"
+cat "$email_count_file"
+
+# Шаг 2: Использование данных из промежуточного файла для формирования окончательного результата
+awk '
+BEGIN {
+    FPAT = "([^,]+)|(\"[^\"]*\")"
+    # Читаем email_count_file и заполняем массив email_count
+    while ((getline < "'"$email_count_file"'") > 0) {
+        split($0, fields, " ")
+        email_count[fields[1]] = fields[2]
+    }
+    close("'"$email_count_file"'")
+}
+{
+    id = $1
+    location_id = $2
+    name = $3
+    title = $4
+    email_base = $5
+    department = $6
+
+    # Формирование полного email с доменом
+    if (email_count[email_base] > 1) {
+        email = email_base location_id "@abc.com"
+    } else {
+        email = email_base "@abc.com"
+    }
+
+    # Запись строки в выходной файл
+    print id "," location_id "," name "," title "," email "," department >> "'"$output_file"'"
+}' "$temp_file"
+
+# Удаление временного файла
+rm "$email_count_file" "$temp_file"
+
+# Сообщение об успешном завершении
+echo "Обработка завершена. Результат сохранен в $output_file"
