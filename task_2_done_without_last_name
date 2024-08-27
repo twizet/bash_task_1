@@ -1,3 +1,5 @@
+#Done 2 with last_name
+
 #!/bin/bash
 
 # Дополнительная защита
@@ -30,11 +32,6 @@ tail -n +2 "$input_file" | while IFS=, read -r id location_id name title email d
         title="$(echo "$title","$email" | awk -F "," '{print $1","$2}')"
     fi
 
-    # Цикл for для вывода каждой переменной
-    for variable in "$id" "$location_id" "$name" "$title" "$email" "$department"; do
-        echo "$variable"
-    done
-
   # Проверка наличия пустых значений
   if [ -z "$name" ]; then
     continue
@@ -47,12 +44,26 @@ tail -n +2 "$input_file" | while IFS=, read -r id location_id name title email d
   # Форматирование имени
   first_name="${first_name,,}"                 # Преобразует все буквы в строчные
   first_name="${first_name^}"                  # Преобразует первую букву в заглавную
-  last_name="${last_name,,}"                   # Преобразует все буквы в строчные
-  last_name="${last_name^}"                    # Преобразует первую букву в заглавную
+
+  # Форматирование фамилии с учетом дефиса
+  if [[ "$last_name" == *-* ]]; then
+    IFS=- read -ra last_name_parts <<< "$last_name"
+    formatted_last_name=""
+    for part in "${last_name_parts[@]}"; do
+      part="${part,,}"  # Преобразует все буквы в строчные
+      part="${part^}"   # Преобразует первую букву в заглавную
+      formatted_last_name+="$part-"
+    done
+    last_name="${formatted_last_name%-}"  # Удаляем последний дефис
+  else
+    last_name="${last_name,,}"                   # Преобразует все буквы в строчные
+    last_name="${last_name^}"                    # Преобразует первую букву в заглавную
+  fi
+
   formatted_name="$first_name $last_name"      # Объединение имени и фамилии
 
   # Форматирование email
-  email_base="${first_name:0:1}${last_name}"   # Формирует базу email
+  email_base="${first_name:0:1}${last_name//[^a-zA-Z]/}"   # Формирует базу email, удаляя все не-буквенные символы
   email_base="${email_base,,}"                 # Преобразует базу email в нижний регистр
   email="$email_base"                          # Добавляет домен
 
@@ -60,8 +71,7 @@ tail -n +2 "$input_file" | while IFS=, read -r id location_id name title email d
   echo "$id,$location_id,$formatted_name,$title,$email,$department" >> "$temp_file"
 done
 
-cat "$temp_file"
-
+# cat "$temp_file"
 
 # Создание выходного файла с заголовком
 echo "id,location_id,name,title,email,department" > "$output_file"
@@ -82,8 +92,8 @@ END {
     }
 }' "$temp_file" > "$email_count_file"
 
-echo "Содержимое файла $email_count_file:"
-cat "$email_count_file"
+# echo "Содержимое файла $email_count_file:"
+# cat "$email_count_file"
 
 # Шаг 2: Использование данных из промежуточного файла для формирования окончательного результата
 awk '
