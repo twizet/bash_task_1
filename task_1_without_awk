@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Дополнительная защита
+set -e
+
+# Включение логирования (простое логирование через echo)
+log_file="script.log"
+exec > >(tee -i "$log_file")
+exec 2>&1
+
 # Проверяем, передан ли аргумент (имя файла)
 if [ -z "$1" ]; then
   echo "Использование: $0 input_file"
@@ -119,3 +127,6 @@ echo "Содержимое файла $output_file:"
 cat "$output_file"
 
 rm "$temp_file" "$email_count_file"
+
+# Сообщение об успешном завершении
+echo "Обработка завершена. Результат сохранен в $output_file"
