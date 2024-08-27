@@ -1,132 +1,131 @@
-#Done 2 with last_name
+  #!/bin/bash
 
-#!/bin/bash
+  # Дополнительная защита
+  set -e
 
-# Дополнительная защита
-set -e
+  # Включение логирования (простое логирование через echo)
+  log_file="script.log"
+  exec > >(tee -i "$log_file")
+  exec 2>&1
 
-# Включение логирования (простое логирование через echo)
-log_file="script.log"
-exec > >(tee -i "$log_file")
-exec 2>&1
+  # Проверка наличия аргумента
+  if [ -z "$1" ]; then
+    echo "Usage: $0 input_file"
+    exit 1
+  fi
 
-# Проверка наличия аргумента
-if [ -z "$1" ]; then
-  echo "Usage: $0 input_file"
-  exit 1
-fi
+  # Определение входного и выходного файлов
+  input_file="$1"
+  temp_file="accounts_temp.csv"
+  output_file="accounts_new.csv"
+  email_count_file="email_count_file"
 
-# Определение входного и выходного файлов
-input_file="$1"
-temp_file="accounts_temp.csv"
-output_file="accounts_new.csv"
-email_count_file="email_count_file"
-
-# Создание временного файла без заголовка
-: > "$temp_file"
+  # Создание временного файла без заголовка
+  : > "$temp_file"
 
 tail -n +2 "$input_file" | while IFS=, read -r id location_id name title email department; do
     # Извлечение и обработка поля title
     title="$(echo "$title" | awk -F "," '{print $1}')"
     if [[ ${title:0:1} = "\"" ]]; then
-        title="$(echo "$title","$email" | awk -F "," '{print $1","$2}')"
+      title="$(echo "$title","$email" | awk -F "," '{print $1","$2}')"
     fi
 
-  # Проверка наличия пустых значений
-  if [ -z "$name" ]; then
-    continue
-  fi
+    # Проверка наличия пустых значений
+    if [ -z "$name" ]; then
+      continue
+    fi
 
-  # Разделение имени и фамилии
-  first_name="${name%% *}"                     # Извлекает первое слово из имени
-  last_name="${name#* }"                       # Извлекает все, что идет после первого пробела
+    # Разделение имени и фамилии
+    first_name="${name%% *}"  # Извлекает первое слово из имени
+    last_name="${name#* }"    # Извлекает все, что идет после первого пробела
 
-  # Форматирование имени
-  first_name="${first_name,,}"                 # Преобразует все буквы в строчные
-  first_name="${first_name^}"                  # Преобразует первую букву в заглавную
+    # Форматирование имени
+    first_name="${first_name,,}"  # Преобразует все буквы в строчные
+    first_name="${first_name^}"   # Преобразует первую букву в заглавную
 
-  # Форматирование фамилии с учетом дефиса
-  if [[ "$last_name" == *-* ]]; then
-    IFS=- read -ra last_name_parts <<< "$last_name"
-    formatted_last_name=""
-    for part in "${last_name_parts[@]}"; do
-      part="${part,,}"  # Преобразует все буквы в строчные
-      part="${part^}"   # Преобразует первую букву в заглавную
-      formatted_last_name+="$part-"
-    done
-    last_name="${formatted_last_name%-}"  # Удаляем последний дефис
-  else
-    last_name="${last_name,,}"                   # Преобразует все буквы в строчные
-    last_name="${last_name^}"                    # Преобразует первую букву в заглавную
-  fi
+    # Обработка фамилии
+    if [[ "$last_name" == *-* ]]; then
+        # Разделение строки по дефису
+        IFS='-' read -ra parts <<< "$last_name"
+        
+        # Преобразование каждой части фамилии
+        part1=$(echo "${parts[0]}" | sed 's/.*/\L&/; s/^./\U&/')
+        part2=$(echo "${parts[1]}" | sed 's/.*/\L&/; s/^./\U&/')
+        
+        # Объединение частей фамилии
+        last_name="$part1-$part2"
+    else
+        # Преобразование фамилии без дефиса
+        last_name=$(echo "$last_name" | sed 's/.*/\L&/; s/^./\U&/')
+    fi
 
-  formatted_name="$first_name $last_name"      # Объединение имени и фамилии
+    formatted_name="$first_name $last_name"  # Объединение имени и фамилии
 
-  # Форматирование email
-  email_base="${first_name:0:1}${last_name//[^a-zA-Z]/}"   # Формирует базу email, удаляя все не-буквенные символы
-  email_base="${email_base,,}"                 # Преобразует базу email в нижний регистр
-  email="$email_base"                          # Добавляет домен
+    # Форматирование email
+    email_base="${first_name:0:1}${last_name}"              # Формирует базу email, удаляя все не-буквенные символы
+    email_base="${email_base,,}"                            # Преобразует базу email в нижний регистр
+    email="$email_base"  
 
-  # Запись строки во временный файл
-  echo "$id,$location_id,$formatted_name,$title,$email,$department" >> "$temp_file"
+    # Запись строки во временный файл
+    echo "$id,$location_id,$formatted_name,$title,$email,$department" >> "$temp_file"
 done
 
-# cat "$temp_file"
+  cat "$temp_file"
 
-# Создание выходного файла с заголовком
-echo "id,location_id,name,title,email,department" > "$output_file"
+  # Создание выходного файла с заголовком
+  echo "id,location_id,name,title,email,department" > "$output_file"
 
-# Второй проход: Подсчет количества вхождений email и запись в файл для посчета 
-# Шаг 1: Подсчет уникальных email и запись в промежуточный файл
-awk '
-BEGIN {
-    FPAT = "([^,]+)|(\"[^\"]*\")"
-}
-{
-    email_base = $5
-    email_count[email_base]++
-}
-END {
-    for (email in email_count) {
-        print email, email_count[email]
-    }
-}' "$temp_file" > "$email_count_file"
+  # Второй проход: Подсчет количества вхождений email и запись в файл для посчета 
+  # Шаг 1: Подсчет уникальных email и запись в промежуточный файл
+  awk '
+  BEGIN {
+      FPAT = "([^,]+)|(\"[^\"]*\")"
+  }
+  {
+      email_base = $5
+      email_count[email_base]++
+  }
+  END {
+      for (email in email_count) {
+          print email, email_count[email]
+      }
+  }' "$temp_file" > "$email_count_file"
 
-# echo "Содержимое файла $email_count_file:"
-# cat "$email_count_file"
+  echo "Содержимое файла $email_count_file:"
+  cat "$email_count_file"
 
-# Шаг 2: Использование данных из промежуточного файла для формирования окончательного результата
-awk '
-BEGIN {
-    FPAT = "([^,]+)|(\"[^\"]*\")"
-    # Читаем email_count_file и заполняем массив email_count
-    while ((getline < "'"$email_count_file"'") > 0) {
-        split($0, fields, " ")
-        email_count[fields[1]] = fields[2]
-    }
-    close("'"$email_count_file"'")
-}
-{
-    id = $1
-    location_id = $2
-    name = $3
-    title = $4
-    email_base = $5
-    department = $6
+  # Шаг 2: Использование данных из промежуточного файла для формирования окончательного результата
+  awk '
+  BEGIN {
+      FPAT = "([^,]+)|(\"[^\"]*\")"
+      # Читаем email_count_file и заполняем массив email_count
+      while ((getline < "'"$email_count_file"'") > 0) {
+          split($0, fields, " ")
+          email_count[fields[1]] = fields[2]
+      }
+      close("'"$email_count_file"'")
+  }
+  {
+      id = $1
+      location_id = $2
+      name = $3
+      title = $4
+      email_base = $5
+      department = $6
 
-    # Формирование полного email с доменом
-    if (email_count[email_base] > 1) {
-        email = email_base location_id "@abc.com"
-    } else {
-        email = email_base "@abc.com"
-    }
+      # Формирование полного email с доменом
+      if (email_count[email_base] > 1) {
+          email = email_base location_id "@abc.com"
+      } else {
+          email = email_base "@abc.com"
+      }
 
-    # Запись строки в выходной файл
-    print id "," location_id "," name "," title "," email "," department >> "'"$output_file"'"
-}' "$temp_file"
+      # Запись строки в выходной файл
+      print id "," location_id "," name "," title "," email "," department >> "'"$output_file"'"
+  }' "$temp_file"
 
-# Удаление временного файла
-rm "$email_count_file" "$temp_file"
+  # Удаление временного файла
+  rm "$email_count_file" "$temp_file"
 
-# Сообщение об успешном завершении
-echo "Обработка завершена. Результат сохранен в $output_file"
+  # Сообщение об успешном завершении
+  echo "Обработка завершена. Результат сохранен в $output_file"
