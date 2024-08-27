@@ -1,0 +1,121 @@
+#!/bin/bash
+
+# Проверяем, передан ли аргумент (имя файла)
+if [ -z "$1" ]; then
+  echo "Использование: $0 input_file"
+  exit 1
+fi
+
+input_file="$1"
+temp_file="accounts_temps.csv"
+output_file="accounts_new.csv"
+email_count_file="email_count_file"
+
+# Определяем временный разделитель (который не используется в CSV)
+TEMP_DELIMITER=$'\034'  # Используем ASCII-разделитель (ASCII код 28)
+
+while IFS= read -r line || [ -n "$line" ]; do
+  # Используем sed для замены запятых внутри кавычек временным разделителем
+  modified_line=$(echo "$line" | sed -E ':a; s/("[^"]*),([^"]*")/\1'"$TEMP_DELIMITER"'\2/; ta')
+
+  # Читаем обработанную строку в переменные, используя запятую как разделитель
+  IFS=, read -r id location_id name title email department <<< "$modified_line"
+
+    # Разделение имени и фамилии
+    first_name="${name%% *}"  # Извлекает первое слово из имени
+    last_name="${name#* }"    # Извлекает все, что идет после первого пробела
+
+    # Форматирование имени
+    first_name="${first_name,,}"  # Преобразует все буквы в строчные
+    first_name="${first_name^}"   # Преобразует первую букву в заглавную
+
+    # Обработка фамилии
+    if [[ "$last_name" == *-* ]]; then
+        # Разделение строки по дефису
+        IFS='-' read -ra parts <<< "$last_name"
+        
+        # Преобразование каждой части фамилии
+        part1=$(echo "${parts[0]}" | sed 's/.*/\L&/; s/^./\U&/')
+        part2=$(echo "${parts[1]}" | sed 's/.*/\L&/; s/^./\U&/')
+        
+        # Объединение частей фамилии
+        last_name="$part1-$part2"
+    else
+        # Преобразование фамилии без дефиса
+        last_name=$(echo "$last_name" | sed 's/.*/\L&/; s/^./\U&/')
+    fi
+
+    formatted_name="$first_name $last_name"  # Объединение имени и фамилии
+
+    # Форматирование email
+    email_base="${first_name:0:1}${last_name}"              # Формирует базу email, удаляя все не-буквенные символы
+    email="${email_base,,}"                                 # Преобразует базу email в нижний регистр  
+
+  # Выводим значения для проверки
+  echo "$id,$location_id,$formatted_name,$title,$email,$department" >> "$temp_file"
+
+done < <(tail -n +2 "$input_file") 
+
+# cat "$temp_file"
+
+# Создание выходного файла с заголовком
+echo "id,location_id,name,title,email,department" > "$output_file"
+
+declare -A email_count
+
+while IFS= read -r line || [ -n "$line" ]; do
+  # Используем sed для замены запятых внутри кавычек временным разделителем
+  modified_line=$(echo "$line" | sed -E ':a; s/("[^"]*),([^"]*")/\1'"$TEMP_DELIMITER"'\2/; ta')
+
+  # Читаем обработанную строку в переменные, используя запятую как разделитель
+  IFS=, read -r id location_id name title email department <<< "$modified_line"
+
+  # Увеличиваем счетчик для каждого уникального email
+  ((email_count["$email"]++))
+
+done < "$temp_file"
+
+
+for email in "${!email_count[@]}"; do
+    echo "$email ${email_count[$email]}" >> "$email_count_file"
+done
+
+
+# Чтение строк из temp_file и формирование окончательного результата
+while IFS= read -r line || [ -n "$line" ]; do
+  # Используем sed для замены запятых внутри кавычек временным разделителем
+  modified_line=$(echo "$line" | sed -E ':a; s/("[^"]*),([^"]*")/\1'"$TEMP_DELIMITER"'\2/; ta')
+
+  # Читаем обработанную строку в переменные, используя запятую как разделитель
+  IFS=, read -r id location_id name title email department <<< "$modified_line"
+    
+  # Формирование полного email с доменом
+  if [ "${email_count[$email]}" -gt 1 ]; then
+    email="${email}${location_id}@abc.com"
+  else
+    email="${email}@abc.com"
+  fi
+  
+  # echo "ID: $id"
+  # echo "Location ID: $location_id"
+  # echo "Name: $name"
+  # echo "Title: $title"
+  # echo "Email: $email"
+  # echo "Department: $department"
+
+  # # Обработка строки с заменой временного разделителя обратно на запятую
+  # restored_line=$(echo "$modified_line" | sed -E ':a; s/("[^"]*)'"$TEMP_DELIMITER"'([^"]*")/\1,\2/; ta')
+
+  # # Читаем обработанную строку в переменные, используя запятую как разделитель
+  # IFS=, read -r id location_id name title _ department <<< "$restored_line"
+
+  title=$(echo "$title" | sed "s/$TEMP_DELIMITER/,/g")
+
+  # Запись строки в выходной файл
+  echo "$id,$location_id,$name,$title,$email,$department" >> "$output_file"
+done < "$temp_file"
+
+echo "Содержимое файла $output_file:"
+cat "$output_file"
+
+rm "$temp_file" "$email_count_file"
