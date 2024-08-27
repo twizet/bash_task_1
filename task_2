@@ -1,0 +1,52 @@
+#!/bin/bash
+
+# Проверяем, передан ли аргумент
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <path_to_output.txt>"
+    exit 1
+fi
+
+input_file="$1"
+
+# Проверяем существование файла
+if [ ! -f "$input_file" ]; then
+    echo "File not found: $input_file"
+    exit 1
+fi
+
+# Извлекаем имя теста
+test_name=$(sed -n '1s/\[ \(.*\) \],.*$/\1/p' "$input_file")
+
+# Извлекаем информацию о тестах
+tests=$(awk '/^(not )?ok/ {
+    status = ($1 == "ok" ? "true" : "false");
+    name = gensub(/^(not )?ok\s+[0-9]+\s+(.+),\s+([0-9]+)ms$/, "\\2", "g");
+    duration = gensub(/^(not )?ok\s+[0-9]+\s+(.+),\s+([0-9]+)ms$/, "\\3ms", "g");
+    printf "{\"name\": \"%s\", \"status\": %s, \"duration\": \"%s\"},\n", name, status, duration;
+}' "$input_file" | sed '$s/,$//')
+
+# Извлекаем сводную информацию
+summary=$(sed -n '$p' "$input_file" | awk '{
+    success = gensub(/([0-9]+) \(of [0-9]+\) tests passed,/, "\\1", "g");
+    failed = gensub(/.*,\s+([0-9]+) tests failed,.*/, "\\1", "g");
+    rating = gensub(/.*rated as ([0-9.]+)%,.*/, "\\1", "g");
+    duration = gensub(/.*spent ([0-9]+)ms$/, "\\1ms", "g");
+    printf "\"success\": %s, \"failed\": %s, \"rating\": %s, \"duration\": \"%s\"", success, failed, rating, duration;
+}')
+
+# Формируем JSON
+json=$(cat <<EOF
+{
+ "testName": "$test_name",
+ "tests": [
+   $tests
+ ],
+ "summary": {
+   $summary
+ }
+}
+EOF
+)
+
+# Используем jq для форматирования JSON
+echo "$json" | ./jq '.'
