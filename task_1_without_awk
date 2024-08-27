@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Дополнительная защита
-set -e
-
 # Включение логирования (простое логирование через echo)
 log_file="script.log"
 exec > >(tee -i "$log_file")
@@ -103,30 +100,15 @@ while IFS= read -r line || [ -n "$line" ]; do
   else
     email="${email}@abc.com"
   fi
-  
-  # echo "ID: $id"
-  # echo "Location ID: $location_id"
-  # echo "Name: $name"
-  # echo "Title: $title"
-  # echo "Email: $email"
-  # echo "Department: $department"
-
-  # # Обработка строки с заменой временного разделителя обратно на запятую
-  # restored_line=$(echo "$modified_line" | sed -E ':a; s/("[^"]*)'"$TEMP_DELIMITER"'([^"]*")/\1,\2/; ta')
-
-  # # Читаем обработанную строку в переменные, используя запятую как разделитель
-  # IFS=, read -r id location_id name title _ department <<< "$restored_line"
 
   title=$(echo "$title" | sed "s/$TEMP_DELIMITER/,/g")
-
   # Запись строки в выходной файл
   echo "$id,$location_id,$name,$title,$email,$department" >> "$output_file"
 done < "$temp_file"
 
-echo "Содержимое файла $output_file:"
+echo ""
+echo "Обработка завершена. Результат сохранен в $output_file"
+echo ""
 cat "$output_file"
 
 rm "$temp_file" "$email_count_file"
-
-# Сообщение об успешном завершении
-echo "Обработка завершена. Результат сохранен в $output_file"
