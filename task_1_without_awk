@@ -7,7 +7,7 @@ exec 2>&1
 
 # Проверяем, передан ли аргумент (имя файла)
 if [ -z "$1" ]; then
-  echo "Использование: $0 input_file"
+  echo "Ошибка: Использование: $0 input_file"
   exit 1
 fi
 
@@ -16,16 +16,25 @@ temp_file="accounts_temps.csv"
 output_file="accounts_new.csv"
 email_count_file="email_count_file"
 
+echo "Входной файл: $input_file"
+echo "Временный файл: $temp_file"
+echo "Выходной файл: $output_file"
+echo "Файл подсчета email: $email_count_file"
+
+: > accounts_new.csv
+echo "Создан пустой файл accounts_new.csv"
+
 # Определяем временный разделитель (который не используется в CSV)
 TEMP_DELIMITER=$'\034'  # Используем ASCII-разделитель (ASCII код 28)
-
+echo "Используется временный разделитель: $TEMP_DELIMITER"
+echo "Начало обработки входного файла"
 while IFS= read -r line || [ -n "$line" ]; do
   # Используем sed для замены запятых внутри кавычек временным разделителем
   modified_line=$(echo "$line" | sed -E ':a; s/("[^"]*),([^"]*")/\1'"$TEMP_DELIMITER"'\2/; ta')
 
   # Читаем обработанную строку в переменные, используя запятую как разделитель
   IFS=, read -r id location_id name title email department <<< "$modified_line"
-
+  echo "Обработана строка: $id,$location_id,$formatted_name,$title,$email,$department"
     # Разделение имени и фамилии
     first_name="${name%% *}"  # Извлекает первое слово из имени
     last_name="${name#* }"    # Извлекает все, что идет после первого пробела
@@ -60,14 +69,14 @@ while IFS= read -r line || [ -n "$line" ]; do
   echo "$id,$location_id,$formatted_name,$title,$email,$department" >> "$temp_file"
 
 done < <(tail -n +2 "$input_file") 
-
+echo "Обработка входного файла завершена"
 # cat "$temp_file"
-
+echo "Создание выходного файла с заголовком"
 # Создание выходного файла с заголовком
 echo "id,location_id,name,title,email,department" > "$output_file"
 
 declare -A email_count
-
+echo "Запись подсчета email в файл"
 while IFS= read -r line || [ -n "$line" ]; do
   # Используем sed для замены запятых внутри кавычек временным разделителем
   modified_line=$(echo "$line" | sed -E ':a; s/("[^"]*),([^"]*")/\1'"$TEMP_DELIMITER"'\2/; ta')
@@ -106,9 +115,9 @@ while IFS= read -r line || [ -n "$line" ]; do
   echo "$id,$location_id,$name,$title,$email,$department" >> "$output_file"
 done < "$temp_file"
 
-echo ""
-echo "Обработка завершена. Результат сохранен в $output_file"
-echo ""
-cat "$output_file"
-
+# echo ""
+# echo "Обработка завершена. Результат сохранен в $output_file"
+# echo ""
+# cat "$output_file"
+echo "Удаление временных файлов"
 rm "$temp_file" "$email_count_file"
