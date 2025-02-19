@@ -1,0 +1,70 @@
+#!/bin/bash
+
+# Check if the input file is provided as an argument
+if [ -z "$1" ]; then
+  echo "Usage: $0 <path_to_output.txt>"
+  exit 1
+fi
+
+input_file="$1"
+
+# Read test name
+test_name=$(grep -oP '(?<=\[ ).*(?= \])' "$input_file")
+
+# Read test results
+test_results=$(grep -E '^(ok|not ok)' "$input_file")
+summary_line=$(grep -oP '\d+ \(of \d+\) tests passed, \d+ tests failed, rated as \d+(\.\d+)?%, spent \d+ms' "$input_file")
+
+total_duration=$(echo "$summary_line" | grep -oP '\d+(?=ms)')
+
+# Extract summary information
+passed_tests=$(echo "$summary_line" | grep -oP '\d+(?= \(of \d+\) tests passed)')
+failed_tests=$(echo "$summary_line" | grep -oP '\d+(?= tests failed)')
+rating=$(echo "$summary_line" | grep -oP '\d+(\.\d+)?(?=%, spent)')
+
+# Initialize JSON structure
+json_output="{
+  \"testName\": \"$test_name\",
+  \"tests\": ["
+
+# Process each test result
+while IFS= read -r line; do
+  status=$(echo "$line" | grep -oP '^ok|not ok')
+  test_name=$(echo "$line" | grep -oP '(?<=  ).*(?=, \d+ms)')
+  duration=$(echo "$line" | grep -oP '\d+(?=ms)')
+
+  # Remove the leading test number from the test name
+  test_name=$(echo "$test_name" | sed -E 's/^[0-9]+ +//')
+
+  if [ "$status" == "ok" ]; then
+    status_bool="true"
+  else
+    status_bool="false"
+  fi
+
+  json_output+="
+    {
+      \"name\": \"$test_name\",
+      \"status\": $status_bool,
+      \"duration\": \"${duration}ms\"
+    },"
+done <<< "$test_results"
+
+# Remove the trailing comma
+json_output=${json_output%,}
+
+# Add the summary to the JSON
+json_output+="
+  ],
+  \"summary\": {
+    \"success\": $passed_tests,
+    \"failed\": $failed_tests,
+    \"rating\": $rating,
+    \"duration\": \"${total_duration}ms\"
+  }
+}"
+
+# Output the JSON to a file
+echo "$json_output" > output.json
+
+echo "JSON output has been written to output.json"
